@@ -13,44 +13,52 @@ public class HTTPRequest {
     private String transferEncoding;
     private boolean chunkedResponse;
     private Map<String, String> parameters;
+    private StringBuilder rawRequest = new StringBuilder();
     private StringBuilder requestHeaders = new StringBuilder();
 
 
     public HTTPRequest(BufferedReader inFromClient) throws IOException {
         this.parameters = new HashMap<>();
-        parseRequest(inFromClient);
+        readFullRequest(inFromClient);
+        parseRequest();
     }
 
-    private void parseRequest(BufferedReader inFromClient) throws IOException {
-        String inputLine = inFromClient.readLine();
-        if (inputLine == null) {
-            throw new IOException("Input from client is null");
+    private void readFullRequest(BufferedReader inFromClient) throws IOException {
+        String line;
+        while ((line = inFromClient.readLine()) != null && !line.isEmpty()) {
+            rawRequest.append(line + "\n");
+        }
+        // This assumes you've read the request line and headers. If expecting a body, you need to handle it separately based on headers.
+    }
+
+    private void parseRequest() throws IOException {
+        String[] requestLines = rawRequest.toString().split("\n");
+        if (requestLines.length < 1) {
+            throw new IOException("Empty request");
         }
 
-        String[] requestLineParts = inputLine.split("\\s+");
+        // Parse the request line
+        String[] requestLineParts = requestLines[0].split("\\s+");
         if (requestLineParts.length < 2) {
-            throw new IOException("Invalid request line: " + inputLine);
+            throw new IOException("Invalid request line: " + requestLines[0]);
         }
 
-        this.type = requestLineParts[0].toUpperCase(); // we get the HTTP method of the client
-        String url = requestLineParts[1].toLowerCase();
+        this.type = requestLineParts[0];
+        parseURL(requestLineParts[1]);
 
-        // Parse the requested URL and extract parameters if present
-        parseURL(url);
-
-        // Continue reading and parsing the headers
-        while ((inputLine = inFromClient.readLine()) != null && !inputLine.equals("\r\n")) {
-            parseHeaderLine(inputLine);
-        }
-
-        // If it's a POST request, parse the body to get parameters
-        if ("POST".equalsIgnoreCase(this.type)) {
-            char[] body = new char[this.contentLength];
-            if (inFromClient.read(body, 0, this.contentLength) != this.contentLength) {
-                throw new IOException("[POST ERROR] :: Couldn't read all request content body!!!");
-            };
-            String requestBody = new String(body);
-            parseParameters(requestBody);
+        // Parse headers and possibly a body if it's a POST request
+        for (int i = 1; i < requestLines.length; i++) {
+            String line = requestLines[i];
+            if (!line.trim().isEmpty()) {
+                parseHeaderLine(line);
+            } else {
+                // Handle POST body here if contentLength > 0
+                // Assuming the body directly follows an empty line after headers
+                if ("POST".equalsIgnoreCase(type) && contentLength > 0 && i < requestLines.length - 1) {
+                    parseParameters(requestLines[i + 1]);
+                }
+                break;
+            }
         }
     }
 
@@ -129,5 +137,9 @@ public class HTTPRequest {
 
     public String getRequestHeaders() {
         return requestHeaders.toString();
+    }
+
+    public String getRawRequest() {
+        return rawRequest.toString();
     }
 }

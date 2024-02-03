@@ -9,8 +9,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class MultiThreadedWebServer {
-    private final ServerSocket serverSocket;
-    private final Set<Socket> connectedClients;
+    private final int portNumber;
     private final ExecutorService executorService;
     private final String rootDirectory;
     private final String defaultPage;
@@ -23,13 +22,11 @@ public class MultiThreadedWebServer {
             "</html>";
     private static int THREAD_POOL_SIZE;
 
-
     public MultiThreadedWebServer(Properties serverConfig) throws IOException {
         THREAD_POOL_SIZE = Integer.parseInt(serverConfig.getProperty("maxThreads"));
-        this.serverSocket = new ServerSocket(Integer.parseInt(serverConfig.getProperty("port")));
+        this.portNumber = Integer.parseInt(serverConfig.getProperty("port"));
         this.rootDirectory = serverConfig.getProperty("root");
         this.defaultPage = serverConfig.getProperty("defaultPage");
-        this.connectedClients = Collections.synchronizedSet(new HashSet<Socket>());
         this.executorService = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
     }
 
@@ -38,15 +35,19 @@ public class MultiThreadedWebServer {
     }
 
     public void run() throws IOException {
-        while (true) {
-            Socket clientSessionSocket = this.serverSocket.accept();
-            this.connectedClients.add(clientSessionSocket);
-            ClientHandler clientHandler = new ClientHandler(clientSessionSocket, this);
-            this.executorService.execute(clientHandler);
+        try {
+            ServerSocket serverSocket = new ServerSocket(portNumber);
+            System.out.println("Server is listening on port " + portNumber);
+            while (true) {
+                Socket clientSessionSocket = serverSocket.accept();
+                System.out.println("Accepted new connection from " + clientSessionSocket.getInetAddress() + ":" + clientSessionSocket.getPort());
+                ClientHandler clientHandler = new ClientHandler(clientSessionSocket, this);
+                this.executorService.execute(clientHandler);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            this.executorService.shutdown();
         }
-    }
-
-    public void disconnectClient(Socket clientSessionSocket) {
-        this.connectedClients.remove(clientSessionSocket);
     }
 }
