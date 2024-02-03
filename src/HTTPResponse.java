@@ -119,7 +119,7 @@ public class HTTPResponse {
         // Default constructor
     }
 
-    public void setStatusCode(int statusCode) {
+    public void setStatus(int statusCode) {
         this.statusCode = statusCode;
         this.statusMessage = getStatusMessage(statusCode);
     }
@@ -144,13 +144,14 @@ public class HTTPResponse {
     }
 
     private String getStatusMessage(int statusCode) {
-        switch (statusCode) {
-            case 200: return "OK";
-            case 404: return "Not Found";
-            case 500: return "Internal Server Error";
-            // Add more status codes as needed
-            default: return "";
-        }
+        return switch (statusCode) {
+            case 200 -> "OK";
+            case 400 -> "Bad Request";
+            case 404 -> "Not Found";
+            case 501 -> "Not Implemented";
+            case 500 -> "Internal Server Error";
+            default -> "Unknown Status";
+        };
     }
 
     public String getHeaders() {
@@ -162,6 +163,17 @@ public class HTTPResponse {
         return responseHeaders.toString();
     }
 
+    public static ContentType getContentTypeByFileName(String fileName) {
+        if (fileName.endsWith(".html")) {
+            return ContentType.HTML;
+        } else if (fileName.matches(".*\\.(jpg|png|gif|bmp)$")) {
+            return ContentType.IMAGE;
+        } else if (fileName.endsWith(".ico")) {
+            return ContentType.ICON;
+        } else {
+            return ContentType.OCTET_STREAM;
+        }
+    }
 }
 
 

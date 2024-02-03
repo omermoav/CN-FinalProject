@@ -16,7 +16,6 @@ public class HTTPRequest {
     private StringBuilder rawRequest = new StringBuilder();
     private StringBuilder requestHeaders = new StringBuilder();
 
-
     public HTTPRequest(BufferedReader inFromClient) throws IOException {
         this.parameters = new HashMap<>();
         readFullRequest(inFromClient);
@@ -26,9 +25,9 @@ public class HTTPRequest {
     private void readFullRequest(BufferedReader inFromClient) throws IOException {
         String line;
         while ((line = inFromClient.readLine()) != null && !line.isEmpty()) {
+            // TODO: handle body of POST request (new line between headers and body)
             rawRequest.append(line + "\n");
         }
-        // This assumes you've read the request line and headers. If expecting a body, you need to handle it separately based on headers.
     }
 
     private void parseRequest() throws IOException {
@@ -38,11 +37,12 @@ public class HTTPRequest {
         }
 
         // Parse the request line
-        String[] requestLineParts = requestLines[0].split("\\s+");
-        if (requestLineParts.length < 2) {
-            throw new IOException("Invalid request line: " + requestLines[0]);
+        String requestFirstLine = requestLines[0];
+        if (requestFirstLine == null || !requestFirstLine.matches("^(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH|TRACE) /.* HTTP/1\\.[01]$")) {
+            throw new IOException("Invalid request: " + requestFirstLine);
         }
 
+        String[] requestLineParts = requestFirstLine.split("\\s+");
         this.type = requestLineParts[0];
         parseURL(requestLineParts[1]);
 
