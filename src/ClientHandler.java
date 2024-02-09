@@ -1,6 +1,7 @@
 import java.io.*;
 import java.net.Socket;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class ClientHandler implements Runnable {
     private final Socket clientSessionSocket;
@@ -47,6 +48,7 @@ public class ClientHandler implements Runnable {
                 return;
             }
 
+            response.setChunkedResponse(request.isChunkedResponse());
             boolean isValidType = verifyRequestType(request);
             if (!isValidType) {
                 // Handle 501 code request
@@ -154,12 +156,13 @@ public class ClientHandler implements Runnable {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         outputStream.write(fileContent);
 
-        if (!requestParams.isEmpty()) {
+        // TODO: handle empty values of params
+        if (requestParams.values().stream().anyMatch(s -> !s.isEmpty())) {
             outputStream.write("\nThe parameters of your request: ".getBytes());
             String paramsAsString = requestParams.toString();
             outputStream.write(paramsAsString.getBytes());
         } else {
-            outputStream.write("\nParams are empty".getBytes());
+            outputStream.write("\nYou did not insert any params values".getBytes());
         }
 
         fileContent = outputStream.toByteArray();

@@ -158,4 +158,8 @@ public class HTTPRequest {
     public String getRawRequest() {
         return rawRequest.toString();
     }
+
+    public boolean isChunkedResponse() {
+        return this.chunkedResponse;
+    }
 }
