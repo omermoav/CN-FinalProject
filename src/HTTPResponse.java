@@ -48,7 +48,7 @@ public class HTTPResponse {
     }
 
     public String getHeaders() {
-        StringBuilder responseHeaders = new StringBuilder(this.statusLine).append("\r\n");
+        StringBuilder responseHeaders = new StringBuilder();
         for (Map.Entry<String, String> header : headers.entrySet()) {
             String headerLine = header.getKey() + ": " + header.getValue() + "\r\n";
             responseHeaders.append(headerLine);
