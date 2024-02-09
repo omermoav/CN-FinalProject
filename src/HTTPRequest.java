@@ -80,10 +80,8 @@ public class HTTPRequest {
         String[] urlParts = url.split("\\?");
 
         // Ignore any ../ in the URL - don't allow directory traversal outside the root directory
-//        String sanitizedPath = urlParts[0].replaceAll("\\.\\./", "");
-//
-//        this.requestedPage = sanitizedPath;
-        this.requestedPage = urlParts[0];
+        // TODO: check why not deleting both ../../
+        this.requestedPage = urlParts[0].replaceAll("\\.\\./", "");
 
         // Check if the requested resource is an image
         this.isImage = this.requestedPage.matches(".*\\.(jpg|bmp|gif|png)$");

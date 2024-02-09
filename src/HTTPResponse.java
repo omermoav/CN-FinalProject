@@ -28,7 +28,6 @@ public class HTTPResponse {
     }
 
     public void send(DataOutputStream outToClient) throws IOException {
-        outToClient.writeBytes(this.statusLine + "\r\n");
         outToClient.writeBytes(this.getHeaders() + "\r\n");
         if (body != null) {
             outToClient.write(body);
@@ -48,7 +47,7 @@ public class HTTPResponse {
     }
 
     public String getHeaders() {
-        StringBuilder responseHeaders = new StringBuilder();
+        StringBuilder responseHeaders = new StringBuilder(this.statusLine).append("\r\n");
         for (Map.Entry<String, String> header : headers.entrySet()) {
             String headerLine = header.getKey() + ": " + header.getValue() + "\r\n";
             responseHeaders.append(headerLine);
