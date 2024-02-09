@@ -99,13 +99,12 @@ public class ClientHandler implements Runnable {
                 return;
             }
 
-            // Regular GET or POST request
             // Handle params_info file
             if (request.getRequestedPage().equals("/params_info.html") && request.getType().equals("POST")) {
                 fileContent = addParamsToFileContent(fileContent, request.getParameters());
             }
 
-            // Other
+            // Regular GET or POST request
             response.setBody(fileContent);
             System.out.println("Response Headers: \n" + response.getHeaders());
             response.send(this.clientOutputStream);
