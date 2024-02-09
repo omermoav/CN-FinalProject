@@ -15,6 +15,7 @@ public class HTTPRequest {
     private Map<String, String> parameters;
     private StringBuilder rawRequest = new StringBuilder();
     private StringBuilder requestHeaders = new StringBuilder();
+    private String requestLine;
 
     public HTTPRequest(BufferedReader inFromClient) throws IOException {
         this.parameters = new HashMap<>();
@@ -24,38 +25,51 @@ public class HTTPRequest {
 
     private void readFullRequest(BufferedReader inFromClient) throws IOException {
         String line;
+        int requestBodyLength = 0;
         while ((line = inFromClient.readLine()) != null && !line.isEmpty()) {
-            // TODO: handle body of POST request (new line between headers and body)
             rawRequest.append(line + "\n");
+
+            if (line.startsWith("Content-Length:")) {
+                requestBodyLength = Integer.parseInt(line.substring("Content-Length: ".length()));
+            }
+        }
+
+        rawRequest.append("\n");
+
+        // Read body content if exists
+        if (requestBodyLength > 0) {
+            char[] body = new char[requestBodyLength];
+            inFromClient.read(body, 0, requestBodyLength);
+            rawRequest.append(new String(body));
         }
     }
 
     private void parseRequest() throws IOException {
-        String[] requestLines = rawRequest.toString().split("\n");
-        if (requestLines.length < 1) {
+        String[] requestByLines = rawRequest.toString().split("\n");
+        if (requestByLines.length < 1) {
             throw new IOException("Empty request");
         }
 
         // Parse the request line
-        String requestFirstLine = requestLines[0];
-        if (requestFirstLine == null || !requestFirstLine.matches("^(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH|TRACE) /.* HTTP/1\\.[01]$")) {
-            throw new IOException("Invalid request: " + requestFirstLine);
+        this.requestLine = requestByLines[0];
+        if (this.requestLine == null || !this.requestLine.matches("^(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH|TRACE) /.* HTTP/1\\.[01]$")) {
+            throw new IOException("Invalid request: " + this.requestLine);
         }
 
-        String[] requestLineParts = requestFirstLine.split("\\s+");
+        String[] requestLineParts = this.requestLine.split("\\s+");
         this.type = requestLineParts[0];
         parseURL(requestLineParts[1]);
 
         // Parse headers and possibly a body if it's a POST request
-        for (int i = 1; i < requestLines.length; i++) {
-            String line = requestLines[i];
+        for (int i = 1; i < requestByLines.length; i++) {
+            String line = requestByLines[i];
             if (!line.trim().isEmpty()) {
                 parseHeaderLine(line);
             } else {
                 // Handle POST body here if contentLength > 0
                 // Assuming the body directly follows an empty line after headers
-                if ("POST".equalsIgnoreCase(type) && contentLength > 0 && i < requestLines.length - 1) {
-                    parseParameters(requestLines[i + 1]);
+                if ("POST".equalsIgnoreCase(type) && contentLength > 0 && i < requestByLines.length - 1) {
+                    parseParameters(requestByLines[i + 1]);
                 }
                 break;
             }
@@ -135,8 +149,7 @@ public class HTTPRequest {
         return parameters;
     }
 
-    public String getRequestHeaders() {
-        return requestHeaders.toString();
+    public String getHeaders() {return this.requestLine + "\r\n" + requestHeaders.toString();
     }
 
     public String getRawRequest() {

@@ -1,6 +1,6 @@
 import java.io.*;
 import java.net.Socket;
-import java.security.spec.ECField;
+import java.util.Map;
 
 public class ClientHandler implements Runnable {
     private final Socket clientSessionSocket;
@@ -35,7 +35,7 @@ public class ClientHandler implements Runnable {
             // Parse the client request
             try {
                 request = new HTTPRequest(this.clientInputStream);
-                System.out.println("HTTP request: \n" + request.getRawRequest());
+                System.out.println("HTTP request Headers: \n" + request.getHeaders());
             } catch (IOException e) {
                 // Handle 400 code request
                 response.setStatus(400);
@@ -54,7 +54,7 @@ public class ClientHandler implements Runnable {
                 response.addHeader("Content-Type", "text/html");
                 String body = "<html><body><h1>501 Not Implemented</h1></body></html>";
                 response.setBody(body.getBytes());
-                System.out.println("Response Headers: \n" + response.getHeaders());
+                System.out.println("HTTP Response Headers: \n" + response.getHeaders());
                 response.send(this.clientOutputStream);
                 return;
             }
@@ -80,6 +80,32 @@ public class ClientHandler implements Runnable {
             // Handle 200 code request
             response.setStatus(200);
             response.addHeader("Content-Type", HTTPResponse.getContentTypeByFileName(requestedFilePath).getValue());
+
+            // Handle HEAD request
+            if (request.getType().equals("HEAD")) {
+                response.addHeader("Content-Length", String.valueOf(fileContent.length));
+                System.out.println("Response Headers: \n" + response.getHeaders());
+                response.send(this.clientOutputStream);
+                return;
+            }
+
+            // Handle TRACE request
+            if (request.getType().equals("TRACE")) {
+                // TODO: check response content-type for trace
+                response.addHeader("Content-Type", HTTPResponse.getContentTypeByFileName("trace").getValue());
+                response.setBody(request.getRawRequest().getBytes());
+                System.out.println("Response Headers: \n" + response.getHeaders());
+                response.send(this.clientOutputStream);
+                return;
+            }
+
+            // Regular GET or POST request
+            // Handle params_info file
+            if (request.getRequestedPage().equals("/params_info.html") && request.getType().equals("POST")) {
+                fileContent = addParamsToFileContent(fileContent, request.getParameters());
+            }
+
+            // Other
             response.setBody(fileContent);
             System.out.println("Response Headers: \n" + response.getHeaders());
             response.send(this.clientOutputStream);
@@ -123,5 +149,21 @@ public class ClientHandler implements Runnable {
             e.printStackTrace();
         }
         return new byte[1];
+    }
+
+    private static byte[] addParamsToFileContent (byte[] fileContent, Map<String, String> requestParams) throws IOException {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+        outputStream.write(fileContent);
+
+        if (!requestParams.isEmpty()) {
+            outputStream.write("\nThe parameters of your request: ".getBytes());
+            String paramsAsString = requestParams.toString();
+            outputStream.write(paramsAsString.getBytes());
+        } else {
+            outputStream.write("\nParams are empty".getBytes());
+        }
+
+        fileContent = outputStream.toByteArray();
+        return fileContent;
     }
 }
