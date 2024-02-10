@@ -28,7 +28,7 @@ public class ClientHandler implements Runnable {
             this.handleRequest();
         } catch (Exception e) {
             // TODO: also printing while clients shuts down the connection...
-            System.out.println("[" + this.clientAddress + "]: Failed to handle client request");
+            System.out.println("[" + this.clientAddress + "]: Failed to respond to client");
         }
     }
 
@@ -40,8 +40,8 @@ public class ClientHandler implements Runnable {
             try {
                 // Parse the client request
                 request = new HTTPRequest();
-                request.setRawRequest(this.clientInputStream);
-                request.setRequestFields();
+                request.readFullRequest(this.clientInputStream);
+                request.parseRequest();
                 System.out.println("HTTP request Headers: \n" + request.getHeaders());
             } catch (IOException e) {
                 // Could not read client's request
@@ -57,7 +57,9 @@ public class ClientHandler implements Runnable {
             }
 
             // Request is valid
+            // Check if the request is a HEAD request
             if ("HEAD".equals(request.getType())) {
+                // In order to exclude the response body
                 response.setHeadResponse(true);
             }
             response.setChunkedResponse(request.isChunkedResponse());
@@ -70,7 +72,7 @@ public class ClientHandler implements Runnable {
             }
 
             // TODO: check if we can use System.getProperty("user.home") to replace ~
-            String requestedFilePath = System.getProperty("user.home") + this.server.getRootDirectory().substring(1) + (request.getRequestedPage().equals("/") ? this.server.getDefaultPage() : request.getRequestedPage());
+            String requestedFilePath = System.getProperty("user.home") + this.server.getRootDirectory().substring(1) + (request.getRequestedPage().equals("/") ? this.server.getDefaultPage() : request.getRequestedPage().substring(1));
             File file = new File(requestedFilePath);
 
             // 404
@@ -85,13 +87,6 @@ public class ClientHandler implements Runnable {
             // 200
             response.setStatus(200);
             response.addHeader("Content-Type", HTTPResponse.getContentTypeByFileName(requestedFilePath).getValue());
-
-            // TODO: check id needed ?
-            // Handle HEAD request
-            if (request.getType().equals("HEAD")) {
-                handleHeadRequest(response, fileContent);
-                return;
-            }
 
             // Handle TRACE request
             if (request.getType().equals("TRACE")) {
@@ -114,6 +109,7 @@ public class ClientHandler implements Runnable {
             handleInternalServerError(response);
         } finally {
             try {
+                System.out.println("[" + this.clientAddress + "]: Closing client connections...");
                 this.clientSessionSocket.close();
                 this.clientInputStream.close();
                 this.clientOutputStream.close();
@@ -155,12 +151,6 @@ public class ClientHandler implements Runnable {
         response.addHeader("Content-Type", "text/html");
         String body = "<html><body><h1>500 Internal Server Error</h1></body></html>";
         response.setBody(body.getBytes());
-        System.out.println("Response Headers: \n" + response.getHeaders());
-        response.send(this.clientOutputStream);
-    }
-
-    private void handleHeadRequest(HTTPResponse response, byte[] fileContent) throws IOException {
-        response.addHeader("Content-Length", String.valueOf(fileContent.length));
         System.out.println("Response Headers: \n" + response.getHeaders());
         response.send(this.clientOutputStream);
     }

@@ -6,54 +6,44 @@ import java.util.Map;
 public class HTTPRequest {
     private String type;
     private String requestedPage;
-    private boolean isImage;
     private int contentLength;
-    private String referer;
-    private String userAgent;
-    private String transferEncoding;
     private boolean chunkedResponse;
-    private Map<String, String> parameters;
-    private StringBuilder rawRequest = new StringBuilder();
-    private StringBuilder requestHeaders = new StringBuilder();
+    private final Map<String, String> parameters;
+    private final StringBuilder rawRequest;
+    private final StringBuilder requestHeaders;
     private String requestLine;
+    private static final String CRLF = "\r\n";
 
     public HTTPRequest() {
         this.parameters = new HashMap<>();
+        this.rawRequest = new StringBuilder();
+        this.requestHeaders = new StringBuilder();
     }
 
-//    public HTTPRequest(BufferedReader inFromClient) throws IOException, BadRequestException {
-//        this.parameters = new HashMap<>();
-//        readFullRequest(inFromClient);
-//        parseRequest();
-//    }
-
-    private void readFullRequest(BufferedReader inFromClient) throws IOException {
+    public void readFullRequest(BufferedReader inFromClient) throws IOException {
         String line;
         int requestBodyLength = 0;
         while ((line = inFromClient.readLine()) != null && !line.isEmpty()) {
-            rawRequest.append(line + "\n");
+            this.rawRequest.append(line).append(CRLF);
 
             if (line.startsWith("Content-Length:")) {
                 requestBodyLength = Integer.parseInt(line.substring("Content-Length: ".length()));
             }
         }
 
-        rawRequest.append("\n");
+        // End of headers
+        this.rawRequest.append(CRLF);
 
         // Read body content if exists
         if (requestBodyLength > 0) {
             char[] body = new char[requestBodyLength];
             inFromClient.read(body, 0, requestBodyLength);
-            rawRequest.append(new String(body));
+            this.rawRequest.append(new String(body));
         }
     }
 
-    public void setRawRequest(BufferedReader inFromClient) throws IOException{
-        readFullRequest(inFromClient);
-    }
-
-    private void parseRequest() throws BadRequestException {
-        String[] requestByLines = rawRequest.toString().split("\n");
+    public void parseRequest() throws BadRequestException {
+        String[] requestByLines = this.rawRequest.toString().split(CRLF);
         if (requestByLines.length < 1) {
             throw new BadRequestException("Empty request");
         }
@@ -71,13 +61,16 @@ public class HTTPRequest {
 
         // Parse headers and possibly a body if it's a POST request
         for (int i = 1; i < requestByLines.length; i++) {
-            String line = requestByLines[i];
-            if (!line.trim().isEmpty()) {
-                parseHeaderLine(line);
+            String header = requestByLines[i];
+            if (!header.trim().isEmpty()) {
+                if (!header.matches("^[a-zA-Z0-9\\-]+: .+$")) {
+                    throw new BadRequestException("Invalid header line: " + header);
+                } else {
+                    parseHeaderLine(header);
+                }
             } else {
-                // Handle POST body here if contentLength > 0
-                // Assuming the body directly follows an empty line after headers
-                if ("POST".equalsIgnoreCase(type) && contentLength > 0 && i < requestByLines.length - 1) {
+                // Handle POST body, assuming the body directly follows an empty line after headers
+                if ("POST".equalsIgnoreCase(type) && this.contentLength > 0 && i < requestByLines.length - 1) {
                     parseParameters(requestByLines[i + 1]);
                 }
                 break;
@@ -85,19 +78,11 @@ public class HTTPRequest {
         }
     }
 
-    public void setRequestFields() throws BadRequestException {
-        parseRequest();
-    }
-
-    private void parseURL(String url) {
-        String[] urlParts = url.split("\\?");
+    private void parseURL(String url){
+        String[] urlParts = url.split("\\?", 2);
 
         // Ignore any ../ in the URL - don't allow directory traversal outside the root directory
-        // TODO: check why not deleting both ../../
         this.requestedPage = urlParts[0].replaceAll("\\.\\./", "");
-
-        // Check if the requested resource is an image
-        this.isImage = this.requestedPage.matches(".*\\.(jpg|bmp|gif|png)$");
 
         // If there are parameters in the URL, parse them
         if (urlParts.length > 1) {
@@ -105,19 +90,18 @@ public class HTTPRequest {
         }
     }
 
-    private void parseHeaderLine(String line) {
+    private void parseHeaderLine(String line) throws BadRequestException {
         requestHeaders.append(line).append("\n");
         String[] header = line.split(": ", 2);
-        if (header.length > 1) {
+        if (header.length == 2) {
             String headerName = header[0].toLowerCase();
             String headerValue = header[1];
             switch (headerName) {
                 case "content-length" -> this.contentLength = Integer.parseInt(headerValue);
-                case "transfer-encoding" -> this.transferEncoding = headerValue;
                 case "chunked" -> this.chunkedResponse = "yes".equalsIgnoreCase(headerValue);
-                case "referer" -> this.referer = headerValue;
-                case "user-agent" -> this.userAgent = headerValue;
             }
+        } else {
+            throw new BadRequestException("Invalid header: " + line);
         }
     }
 
@@ -132,22 +116,22 @@ public class HTTPRequest {
     }
 
     public String getType() {
-        return type;
+        return this.type;
     }
 
     public String getRequestedPage() {
-        return requestedPage;
+        return this.requestedPage;
     }
 
     public Map<String, String> getParameters() {
-        return parameters;
+        return this.parameters;
     }
 
-    public String getHeaders() {return this.requestLine + "\r\n" + requestHeaders.toString();
+    public String getHeaders() {return this.requestLine + CRLF + this.requestHeaders;
     }
 
     public String getRawRequest() {
-        return rawRequest.toString();
+        return this.rawRequest.toString();
     }
 
     public boolean isChunkedResponse() {
