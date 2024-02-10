@@ -9,7 +9,9 @@ public class Main {
             MultiThreadedWebServer server = new MultiThreadedWebServer(config);
             server.run();
         } catch (IOException e) {
-            e.printStackTrace();
+            System.out.println("Failed to load data from configuration file: " + e.getMessage());
+        } catch (InternalServerException e) {
+            System.out.println("An internal server error occurred: " + e.getMessage());
         }
     }
 }

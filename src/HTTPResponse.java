@@ -2,14 +2,13 @@ import java.io.*;
 import java.util.*;
 
 public class HTTPResponse {
-    private int statusCode;
-    private String statusMessage;
     private final Map<String, String> headers = new HashMap<>();
     private byte[] body;
     private String statusLine;
     private boolean chunkedResponse;
     private static final String CRLF = "\r\n";
     private static final int CHUNK_SIZE = 500;
+    private boolean isHeadResponse = false;
 
     public HTTPResponse() {}
 
@@ -20,10 +19,13 @@ public class HTTPResponse {
         }
     }
 
+    public void setHeadResponse(boolean isHeadResponse) {
+        this.isHeadResponse = isHeadResponse;
+    }
+
     public void setStatus(int statusCode) {
-        this.statusCode = statusCode;
-        this.statusMessage = getStatusMessage(statusCode);
-        this.statusLine = "HTTP/1.1 " + this.statusCode + " " + this.statusMessage;
+        String statusMessage = getStatusMessage(statusCode);
+        this.statusLine = "HTTP/1.1 " + statusCode + " " + statusMessage;
     }
 
     public void addHeader(String key, String value) {
@@ -39,7 +41,7 @@ public class HTTPResponse {
 
     public void send(DataOutputStream outToClient) throws IOException {
         outToClient.writeBytes(this.getHeaders() + "\r\n");
-        if (body != null) {
+        if (body != null && !isHeadResponse) {
             if (this.chunkedResponse) {
                 // Handle chunked response
                 int offset = 0;

@@ -1,10 +1,7 @@
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.Collections;
-import java.util.HashSet;
 import java.util.Properties;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -13,38 +10,33 @@ public class MultiThreadedWebServer {
     private final ExecutorService executorService;
     private final String rootDirectory;
     private final String defaultPage;
-    private static final String hardCodedResponse = "HTTP/1.1 200 OK\r\n" +
-            "\r\n" +
-            "<html>\n" +
-            "<body>\n" +
-            "<h1>Hello, World!</h1>\n" +
-            "</body>\n" +
-            "</html>";
-    private static int THREAD_POOL_SIZE;
 
-    public MultiThreadedWebServer(Properties serverConfig) throws IOException {
-        THREAD_POOL_SIZE = Integer.parseInt(serverConfig.getProperty("maxThreads"));
+    public MultiThreadedWebServer(Properties serverConfig) {
         this.portNumber = Integer.parseInt(serverConfig.getProperty("port"));
         this.rootDirectory = serverConfig.getProperty("root");
         this.defaultPage = serverConfig.getProperty("defaultPage");
-        this.executorService = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+        int maxThreads = Integer.parseInt(serverConfig.getProperty("maxThreads"));
+        this.executorService = Executors.newFixedThreadPool(maxThreads);
     }
 
-    public void run() throws IOException {
-        try {
-            ServerSocket serverSocket = new ServerSocket(portNumber);
-            System.out.println("Server is listening on port " + portNumber);
+    public void run() throws InternalServerException {
+        String clientAddress;
+        try (ServerSocket serverSocket = new ServerSocket(this.portNumber)) {
+            System.out.println("Server is listening on port " + this.portNumber);
             while (true) {
                 Socket clientSessionSocket = serverSocket.accept();
-                System.out.println("Accepted new connection from " + clientSessionSocket.getInetAddress() + ":" + clientSessionSocket.getPort());
-                ClientHandler clientHandler = new ClientHandler(clientSessionSocket, this);
-                clientHandler.run();
-                //this.executorService.execute(clientHandler);
+                clientAddress = clientSessionSocket.getInetAddress() + ":" + clientSessionSocket.getPort();
+                System.out.println("Accepted new connection from " + clientAddress);
+                try {
+                    ClientHandler clientHandler = new ClientHandler(clientSessionSocket, this);
+                    this.executorService.execute(clientHandler);
+                } catch (ClientHandlerException e) {
+                    System.out.println("[" + clientAddress + "]: Failed to initialize client socket streams");
+                }
             }
-        } catch (Exception e) {
-            // TODO: Handle this exception
-            System.out.println("An unexpected error occurred");
-            e.printStackTrace();
+        } catch (IOException e) {
+            System.out.println("Failed to start server: " + e.getMessage());
+            throw new InternalServerException(e);
         } finally {
             this.executorService.shutdown();
         }

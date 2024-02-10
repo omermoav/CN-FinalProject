@@ -8,12 +8,18 @@ public class ClientHandler implements Runnable {
     private final MultiThreadedWebServer server;
     private final BufferedReader clientInputStream;
     private final DataOutputStream clientOutputStream;
+    private final String clientAddress;
 
-    public ClientHandler(Socket clientSessionSocket, MultiThreadedWebServer server) throws IOException {
-        this.clientSessionSocket = clientSessionSocket;
-        this.server = server;
-        this.clientInputStream = new BufferedReader(new InputStreamReader(this.clientSessionSocket.getInputStream()));
-        this.clientOutputStream = new DataOutputStream(this.clientSessionSocket.getOutputStream());
+    public ClientHandler(Socket clientSessionSocket, MultiThreadedWebServer server) throws ClientHandlerException {
+        try {
+            this.clientSessionSocket = clientSessionSocket;
+            this.clientAddress = clientSessionSocket.getInetAddress() + ":" + clientSessionSocket.getPort();
+            this.server = server;
+            this.clientInputStream = new BufferedReader(new InputStreamReader(this.clientSessionSocket.getInputStream()));
+            this.clientOutputStream = new DataOutputStream(this.clientSessionSocket.getOutputStream());
+        } catch (IOException e) {
+            throw new ClientHandlerException(e);
+        }
     }
 
     @Override
@@ -21,10 +27,8 @@ public class ClientHandler implements Runnable {
         try {
             this.handleRequest();
         } catch (Exception e) {
-            // Could not send response to client
-            System.out.println("Could not send response to client");
-            e.printStackTrace();
-            throw new RuntimeException(e);
+            // TODO: also printing while clients shuts down the connection...
+            System.out.println("[" + this.clientAddress + "]: Failed to handle client request");
         }
     }
 
@@ -33,71 +37,65 @@ public class ClientHandler implements Runnable {
         HTTPResponse response = new HTTPResponse();
 
         try {
-            // Parse the client request
             try {
-                request = new HTTPRequest(this.clientInputStream);
+                // Parse the client request
+                request = new HTTPRequest();
+                request.setRawRequest(this.clientInputStream);
+                request.setRequestFields();
                 System.out.println("HTTP request Headers: \n" + request.getHeaders());
             } catch (IOException e) {
-                // Handle 400 code request
-                response.setStatus(400);
-                response.addHeader("Content-Type", "text/html");
-                String body = "<html><body><h1>400 Bad Request</h1></body></html>";
-                response.setBody(body.getBytes());
-                System.out.println("Response Headers: \n" + response.getHeaders());
-                response.send(this.clientOutputStream);
+                // Could not read client's request
+                System.out.println("[" + this.clientAddress + "]: Server failed to read client's request");
+                throw e;
+            } catch (BadRequestException e) {
+                if ("HEAD".equals(request.getType())) {
+                    response.setHeadResponse(true);
+                }
+                // 400
+                handleBadRequestError(response);
                 return;
             }
 
+            // Request is valid
+            if ("HEAD".equals(request.getType())) {
+                response.setHeadResponse(true);
+            }
             response.setChunkedResponse(request.isChunkedResponse());
+
             boolean isValidType = verifyRequestType(request);
+            // 501
             if (!isValidType) {
-                // Handle 501 code request
-                response.setStatus(501);
-                response.addHeader("Content-Type", "text/html");
-                String body = "<html><body><h1>501 Not Implemented</h1></body></html>";
-                response.setBody(body.getBytes());
-                System.out.println("HTTP Response Headers: \n" + response.getHeaders());
-                response.send(this.clientOutputStream);
+                handleNotImplementedError(response);
                 return;
             }
 
-            // TODO: change back to using ~ (?)
-            String requestedFilePath = System.getProperty("user.home") + this.server.getRootDirectory() + (request.getRequestedPage().equals("/") ? this.server.getDefaultPage() : request.getRequestedPage());
-            //String requestedFilePath = '~' + this.server.getRootDirectory() + (request.getRequestedPage().equals("/") ? this.server.getDefaultPage() : request.getRequestedPage());
+            // TODO: check if we can use System.getProperty("user.home") to replace ~
+            String requestedFilePath = System.getProperty("user.home") + this.server.getRootDirectory().substring(1) + (request.getRequestedPage().equals("/") ? this.server.getDefaultPage() : request.getRequestedPage());
             File file = new File(requestedFilePath);
 
+            // 404
             if (!file.exists() || file.isDirectory()) {
-                // Handle 404 code request
-                response.setStatus(404);
-                response.addHeader("Content-Type", "text/html");
-                String body = "<html><body><h1>404 Page Not Found</h1></body></html>";
-                response.setBody(body.getBytes());
-                System.out.println("Response Headers: \n" + response.getHeaders());
-                response.send(this.clientOutputStream);
+                handleNotFoundError(response);
                 return;
             }
 
             // Read the file content
             byte[] fileContent = readFile(file);
-            // Handle 200 code request
+
+            // 200
             response.setStatus(200);
             response.addHeader("Content-Type", HTTPResponse.getContentTypeByFileName(requestedFilePath).getValue());
 
+            // TODO: check id needed ?
             // Handle HEAD request
             if (request.getType().equals("HEAD")) {
-                response.addHeader("Content-Length", String.valueOf(fileContent.length));
-                System.out.println("Response Headers: \n" + response.getHeaders());
-                response.send(this.clientOutputStream);
+                handleHeadRequest(response, fileContent);
                 return;
             }
 
             // Handle TRACE request
             if (request.getType().equals("TRACE")) {
-                // TODO: check response content-type for trace
-                response.addHeader("Content-Type", HTTPResponse.getContentTypeByFileName("trace").getValue());
-                response.setBody(request.getRawRequest().getBytes());
-                System.out.println("Response Headers: \n" + response.getHeaders());
-                response.send(this.clientOutputStream);
+                handleTraceRequest(response, request);
                 return;
             }
 
@@ -112,23 +110,67 @@ public class ClientHandler implements Runnable {
             response.send(this.clientOutputStream);
 
         } catch (Exception e) {
-            // Handle 500 code request
-            response.setStatus(500);
-            response.addHeader("Content-Type", "text/html");
-            String body = "<html><body><h1>500 Internal Server Error</h1></body></html>";
-            response.setBody(body.getBytes());
-            System.out.println("Response Headers: \n" + response.getHeaders());
-            response.send(this.clientOutputStream);
+            // 500
+            handleInternalServerError(response);
         } finally {
             try {
                 this.clientSessionSocket.close();
                 this.clientInputStream.close();
                 this.clientOutputStream.close();
             } catch (IOException e) {
-                System.out.println("Failed to close client resources");
-                e.printStackTrace();
+                System.out.println("[" + this.clientAddress + "]: Failed to close client sockets streams");
             }
         }
+    }
+
+    private void handleBadRequestError(HTTPResponse response) throws IOException {
+        response.setStatus(400);
+        response.addHeader("Content-Type", "text/html");
+        String body = "<html><body><h1>400 Bad Request</h1></body></html>";
+        response.setBody(body.getBytes());
+        System.out.println("Response Headers: \n" + response.getHeaders());
+        response.send(this.clientOutputStream);
+    }
+
+    private void handleNotImplementedError(HTTPResponse response) throws IOException {
+        response.setStatus(501);
+        response.addHeader("Content-Type", "text/html");
+        String body = "<html><body><h1>501 Not Implemented</h1></body></html>";
+        response.setBody(body.getBytes());
+        System.out.println("Response Headers: \n" + response.getHeaders());
+        response.send(this.clientOutputStream);
+    }
+
+    private void handleNotFoundError(HTTPResponse response) throws IOException {
+        response.setStatus(404);
+        response.addHeader("Content-Type", "text/html");
+        String body = "<html><body><h1>404 Not Found</h1></body></html>";
+        response.setBody(body.getBytes());
+        System.out.println("Response Headers: \n" + response.getHeaders());
+        response.send(this.clientOutputStream);
+    }
+
+    private void handleInternalServerError(HTTPResponse response) throws IOException {
+        response.setStatus(500);
+        response.addHeader("Content-Type", "text/html");
+        String body = "<html><body><h1>500 Internal Server Error</h1></body></html>";
+        response.setBody(body.getBytes());
+        System.out.println("Response Headers: \n" + response.getHeaders());
+        response.send(this.clientOutputStream);
+    }
+
+    private void handleHeadRequest(HTTPResponse response, byte[] fileContent) throws IOException {
+        response.addHeader("Content-Length", String.valueOf(fileContent.length));
+        System.out.println("Response Headers: \n" + response.getHeaders());
+        response.send(this.clientOutputStream);
+    }
+
+    private void handleTraceRequest(HTTPResponse response, HTTPRequest request) throws IOException {
+        // TODO: check response content-type for trace
+        response.addHeader("Content-Type", HTTPResponse.getContentTypeByFileName("trace").getValue());
+        response.setBody(request.getRawRequest().getBytes());
+        System.out.println("Response Headers: \n" + response.getHeaders());
+        response.send(this.clientOutputStream);
     }
 
     private boolean verifyRequestType(HTTPRequest request) {
@@ -147,7 +189,6 @@ public class ClientHandler implements Runnable {
             return bFile;
         } catch (IOException e) {
             System.out.println("Failed to read requested file");
-            e.printStackTrace();
         }
         return new byte[1];
     }
@@ -156,10 +197,14 @@ public class ClientHandler implements Runnable {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         outputStream.write(fileContent);
 
-        // TODO: handle empty values of params
+        // TODO: handle empty values of params - ask if needed to print empty params or ignore them
         if (requestParams.values().stream().anyMatch(s -> !s.isEmpty())) {
             outputStream.write("\nThe parameters of your request: ".getBytes());
-            String paramsAsString = requestParams.toString();
+            // Exclude params with empty values
+            Map<String, String> filteredParams = requestParams.entrySet().stream()
+                    .filter(entry -> !entry.getValue().isEmpty())
+                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+            String paramsAsString = filteredParams.toString();
             outputStream.write(paramsAsString.getBytes());
         } else {
             outputStream.write("\nYou did not insert any params values".getBytes());

@@ -17,11 +17,15 @@ public class HTTPRequest {
     private StringBuilder requestHeaders = new StringBuilder();
     private String requestLine;
 
-    public HTTPRequest(BufferedReader inFromClient) throws IOException {
+    public HTTPRequest() {
         this.parameters = new HashMap<>();
-        readFullRequest(inFromClient);
-        parseRequest();
     }
+
+//    public HTTPRequest(BufferedReader inFromClient) throws IOException, BadRequestException {
+//        this.parameters = new HashMap<>();
+//        readFullRequest(inFromClient);
+//        parseRequest();
+//    }
 
     private void readFullRequest(BufferedReader inFromClient) throws IOException {
         String line;
@@ -44,18 +48,23 @@ public class HTTPRequest {
         }
     }
 
-    private void parseRequest() throws IOException {
+    public void setRawRequest(BufferedReader inFromClient) throws IOException{
+        readFullRequest(inFromClient);
+    }
+
+    private void parseRequest() throws BadRequestException {
         String[] requestByLines = rawRequest.toString().split("\n");
         if (requestByLines.length < 1) {
-            throw new IOException("Empty request");
+            throw new BadRequestException("Empty request");
         }
 
         // Parse the request line
         this.requestLine = requestByLines[0];
         if (this.requestLine == null || !this.requestLine.matches("^(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH|TRACE) /.* HTTP/1\\.[01]$")) {
-            throw new IOException("Invalid request: " + this.requestLine);
+            throw new BadRequestException("Invalid request: " + this.requestLine);
         }
 
+        // TODO: ask what is needed to validate the HTTP request
         String[] requestLineParts = this.requestLine.split("\\s+");
         this.type = requestLineParts[0];
         parseURL(requestLineParts[1]);
@@ -74,6 +83,10 @@ public class HTTPRequest {
                 break;
             }
         }
+    }
+
+    public void setRequestFields() throws BadRequestException {
+        parseRequest();
     }
 
     private void parseURL(String url) {
@@ -118,34 +131,12 @@ public class HTTPRequest {
         }
     }
 
-    public boolean shouldUseChunkedEncoding() {
-        // Use chunked encoding if the header is set to yes, and the transfer-encoding allows it
-        return "chunked".equalsIgnoreCase(this.transferEncoding) && this.chunkedResponse;
-    }
-
-    // Getters
     public String getType() {
         return type;
     }
 
     public String getRequestedPage() {
         return requestedPage;
-    }
-
-    public boolean isImage() {
-        return isImage;
-    }
-
-    public int getContentLength() {
-        return contentLength;
-    }
-
-    public String getReferer() {
-        return referer;
-    }
-
-    public String getUserAgent() {
-        return userAgent;
     }
 
     public Map<String, String> getParameters() {
