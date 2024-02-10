@@ -3,6 +3,8 @@ import java.net.Socket;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static java.lang.Thread.sleep;
+
 public class ClientHandler implements Runnable {
     private final Socket clientSessionSocket;
     private final MultiThreadedWebServer server;
@@ -41,8 +43,10 @@ public class ClientHandler implements Runnable {
                 // Parse the client request
                 request = new HTTPRequest();
                 request.readFullRequest(this.clientInputStream);
+                System.out.println("[" + this.clientAddress + "]: HTTP request Headers: \n" + request.getRawHeaders());
                 request.parseRequest();
-                System.out.println("HTTP request Headers: \n" + request.getHeaders());
+                // TODO: decide if delete the next line
+                //System.out.println("[" + this.clientAddress + "]: HTTP request Headers: \n" + request.getHeaders());
             } catch (IOException e) {
                 // Could not read client's request
                 System.out.println("[" + this.clientAddress + "]: Server failed to read client's request");
@@ -101,15 +105,14 @@ public class ClientHandler implements Runnable {
 
             // Regular GET or POST request
             response.setBody(fileContent);
-            System.out.println("Response Headers: \n" + response.getHeaders());
-            response.send(this.clientOutputStream);
+            sendResponseToClient(response);
 
         } catch (Exception e) {
             // 500
             handleInternalServerError(response);
         } finally {
             try {
-                System.out.println("[" + this.clientAddress + "]: Closing client connections...");
+                System.out.println("[" + this.clientAddress + "]: Closing client connection ...\n");
                 this.clientSessionSocket.close();
                 this.clientInputStream.close();
                 this.clientOutputStream.close();
@@ -124,8 +127,7 @@ public class ClientHandler implements Runnable {
         response.addHeader("Content-Type", "text/html");
         String body = "<html><body><h1>400 Bad Request</h1></body></html>";
         response.setBody(body.getBytes());
-        System.out.println("Response Headers: \n" + response.getHeaders());
-        response.send(this.clientOutputStream);
+        sendResponseToClient(response);
     }
 
     private void handleNotImplementedError(HTTPResponse response) throws IOException {
@@ -133,8 +135,7 @@ public class ClientHandler implements Runnable {
         response.addHeader("Content-Type", "text/html");
         String body = "<html><body><h1>501 Not Implemented</h1></body></html>";
         response.setBody(body.getBytes());
-        System.out.println("Response Headers: \n" + response.getHeaders());
-        response.send(this.clientOutputStream);
+        sendResponseToClient(response);
     }
 
     private void handleNotFoundError(HTTPResponse response) throws IOException {
@@ -142,8 +143,7 @@ public class ClientHandler implements Runnable {
         response.addHeader("Content-Type", "text/html");
         String body = "<html><body><h1>404 Not Found</h1></body></html>";
         response.setBody(body.getBytes());
-        System.out.println("Response Headers: \n" + response.getHeaders());
-        response.send(this.clientOutputStream);
+        sendResponseToClient(response);
     }
 
     private void handleInternalServerError(HTTPResponse response) throws IOException {
@@ -151,16 +151,14 @@ public class ClientHandler implements Runnable {
         response.addHeader("Content-Type", "text/html");
         String body = "<html><body><h1>500 Internal Server Error</h1></body></html>";
         response.setBody(body.getBytes());
-        System.out.println("Response Headers: \n" + response.getHeaders());
-        response.send(this.clientOutputStream);
+        sendResponseToClient(response);
     }
 
     private void handleTraceRequest(HTTPResponse response, HTTPRequest request) throws IOException {
         // TODO: check response content-type for trace
         response.addHeader("Content-Type", HTTPResponse.getContentTypeByFileName("trace").getValue());
         response.setBody(request.getRawRequest().getBytes());
-        System.out.println("Response Headers: \n" + response.getHeaders());
-        response.send(this.clientOutputStream);
+        sendResponseToClient(response);
     }
 
     private boolean verifyRequestType(HTTPRequest request) {
@@ -188,19 +186,26 @@ public class ClientHandler implements Runnable {
         outputStream.write(fileContent);
 
         // TODO: handle empty values of params - ask if needed to print empty params or ignore them
-        if (requestParams.values().stream().anyMatch(s -> !s.isEmpty())) {
-            outputStream.write("\nThe parameters of your request: ".getBytes());
-            // Exclude params with empty values
-            Map<String, String> filteredParams = requestParams.entrySet().stream()
-                    .filter(entry -> !entry.getValue().isEmpty())
-                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-            String paramsAsString = filteredParams.toString();
-            outputStream.write(paramsAsString.getBytes());
-        } else {
-            outputStream.write("\nYou did not insert any params values".getBytes());
-        }
+//        if (requestParams.values().stream().anyMatch(s -> !s.isEmpty())) {
+//            outputStream.write("\nThe parameters of your request: ".getBytes());
+//            // Exclude params with empty values
+//            Map<String, String> filteredParams = requestParams.entrySet().stream()
+//                    .filter(entry -> !entry.getValue().isEmpty())
+//                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+//            String paramsAsString = filteredParams.toString();
+//            outputStream.write(paramsAsString.getBytes());
+//        } else {
+//            outputStream.write("\nYou did not insert any params values".getBytes());
+//        }
+        outputStream.write("</br>The parameters of your request: ".getBytes());
+        outputStream.write(requestParams.toString().getBytes());
 
         fileContent = outputStream.toByteArray();
         return fileContent;
+    }
+
+    private void sendResponseToClient(HTTPResponse response) throws IOException {
+        System.out.println("[" + this.clientAddress + "]: Response Headers: \n" + response.getHeaders());
+        response.send(this.clientOutputStream);
     }
 }

@@ -9,22 +9,25 @@ public class HTTPRequest {
     private int contentLength;
     private boolean chunkedResponse;
     private final Map<String, String> parameters;
-    private final StringBuilder rawRequest;
+    private final StringBuilder rawFullRequest;
+    private final StringBuilder rawHeaders;
     private final StringBuilder requestHeaders;
     private String requestLine;
     private static final String CRLF = "\r\n";
 
     public HTTPRequest() {
         this.parameters = new HashMap<>();
-        this.rawRequest = new StringBuilder();
+        this.rawFullRequest = new StringBuilder();
         this.requestHeaders = new StringBuilder();
+        this.rawHeaders = new StringBuilder();
     }
 
     public void readFullRequest(BufferedReader inFromClient) throws IOException {
         String line;
         int requestBodyLength = 0;
         while ((line = inFromClient.readLine()) != null && !line.isEmpty()) {
-            this.rawRequest.append(line).append(CRLF);
+            this.rawFullRequest.append(line).append(CRLF);
+            this.rawHeaders.append(line).append(CRLF);
 
             if (line.startsWith("Content-Length:")) {
                 requestBodyLength = Integer.parseInt(line.substring("Content-Length: ".length()));
@@ -32,18 +35,18 @@ public class HTTPRequest {
         }
 
         // End of headers
-        this.rawRequest.append(CRLF);
+        this.rawFullRequest.append(CRLF);
 
         // Read body content if exists
         if (requestBodyLength > 0) {
             char[] body = new char[requestBodyLength];
             inFromClient.read(body, 0, requestBodyLength);
-            this.rawRequest.append(new String(body));
+            this.rawFullRequest.append(new String(body));
         }
     }
 
     public void parseRequest() throws BadRequestException {
-        String[] requestByLines = this.rawRequest.toString().split(CRLF);
+        String[] requestByLines = this.rawFullRequest.toString().split(CRLF);
         if (requestByLines.length < 1) {
             throw new BadRequestException("Empty request");
         }
@@ -131,7 +134,11 @@ public class HTTPRequest {
     }
 
     public String getRawRequest() {
-        return this.rawRequest.toString();
+        return this.rawFullRequest.toString();
+    }
+
+    public String getRawHeaders() {
+        return this.rawHeaders.toString();
     }
 
     public boolean isChunkedResponse() {
