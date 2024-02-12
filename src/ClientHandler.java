@@ -52,6 +52,7 @@ public class ClientHandler implements Runnable {
                 System.out.println("[" + this.clientAddress + "]: Server failed to read client's request");
                 throw e;
             } catch (BadRequestException e) {
+                System.out.println(e.getMessage() + "!!!!");
                 if ("HEAD".equals(request.getType())) {
                     response.setHeadResponse(true);
                 }

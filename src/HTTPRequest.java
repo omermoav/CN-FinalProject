@@ -1,5 +1,6 @@
 import java.io.BufferedReader;
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -11,18 +12,16 @@ public class HTTPRequest {
     private final Map<String, String> parameters;
     private final StringBuilder rawFullRequest;
     private final StringBuilder rawHeaders;
-    private final StringBuilder requestHeaders;
     private String requestLine;
     private static final String CRLF = "\r\n";
 
     public HTTPRequest() {
         this.parameters = new HashMap<>();
         this.rawFullRequest = new StringBuilder();
-        this.requestHeaders = new StringBuilder();
         this.rawHeaders = new StringBuilder();
     }
 
-    public void readFullRequest(BufferedReader inFromClient) throws IOException {
+    public void readFullRequest(BufferedReader inFromClient) throws IOException, BadRequestException {
         String line;
         int requestBodyLength = 0;
         while ((line = inFromClient.readLine()) != null && !line.isEmpty()) {
@@ -30,8 +29,19 @@ public class HTTPRequest {
             this.rawHeaders.append(line).append(CRLF);
 
             if (line.startsWith("Content-Length:")) {
-                requestBodyLength = Integer.parseInt(line.substring("Content-Length: ".length()));
+                try {
+                    requestBodyLength = Integer.parseInt(line.substring("Content-Length: ".length()));
+                    if (requestBodyLength < 0) {
+                        throw new BadRequestException("Content-Length must be non-negative");
+                    }
+                }  catch (NumberFormatException e) {
+                    throw new BadRequestException ("Content-Length header value isn't a parsable Integer");
+                }
             }
+        }
+
+        if (line == null) {
+            throw new BadRequestException("Request is missing final CRLF");
         }
 
         // End of headers
@@ -40,7 +50,11 @@ public class HTTPRequest {
         // Read body content if exists
         if (requestBodyLength > 0) {
             char[] body = new char[requestBodyLength];
-            inFromClient.read(body, 0, requestBodyLength);
+            try {
+                inFromClient.read(body, 0, requestBodyLength);
+            } catch (SocketTimeoutException e) {
+                throw new BadRequestException("Make sure Content-Length header value isn't greater the actual content length and try again.");
+            }
             this.rawFullRequest.append(new String(body));
         }
     }
@@ -53,8 +67,8 @@ public class HTTPRequest {
 
         // Parse the request line
         this.requestLine = requestByLines[0];
-        if (this.requestLine == null || !this.requestLine.matches("^(GET|POST|PUT|DELETE|HEAD|OPTIONS|PATCH|TRACE) /.* HTTP/1\\.[01]$")) {
-            throw new BadRequestException("Invalid request: " + this.requestLine);
+        if (this.requestLine == null || !this.requestLine.matches("^.+ /.* HTTP/1\\.[01]$")) {
+            throw new BadRequestException("Invalid request line: " + this.requestLine);
         }
 
         // TODO: ask what is needed to validate the HTTP request
@@ -72,6 +86,9 @@ public class HTTPRequest {
                     parseHeaderLine(header);
                 }
             } else {
+                if (this.contentLength > 0 && ("GET".equalsIgnoreCase(this.type) || "HEAD".equalsIgnoreCase(this.type))) {
+                    throw new BadRequestException("Request of type " + this.type + " cannot have a body");
+                }
                 // Handle POST body, assuming the body directly follows an empty line after headers
                 if ("POST".equalsIgnoreCase(type) && this.contentLength > 0 && i < requestByLines.length - 1) {
                     parseParameters(requestByLines[i + 1]);
@@ -94,7 +111,6 @@ public class HTTPRequest {
     }
 
     private void parseHeaderLine(String line) throws BadRequestException {
-        requestHeaders.append(line).append("\n");
         String[] header = line.split(": ", 2);
         if (header.length == 2) {
             String headerName = header[0].toLowerCase();
@@ -115,6 +131,7 @@ public class HTTPRequest {
             if (param.length > 1) {
                 this.parameters.put(param[0], param[1]);
             }
+            // TODO: Else -> BadRequest(?)
         }
     }
 
@@ -128,9 +145,6 @@ public class HTTPRequest {
 
     public Map<String, String> getParameters() {
         return this.parameters;
-    }
-
-    public String getHeaders() {return this.requestLine + CRLF + this.requestHeaders;
     }
 
     public String getRawRequest() {

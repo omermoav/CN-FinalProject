@@ -25,6 +25,7 @@ public class MultiThreadedWebServer {
             System.out.println("Server is listening on port " + this.portNumber);
             while (true) {
                 Socket clientSessionSocket = serverSocket.accept();
+                clientSessionSocket.setSoTimeout(10000);
                 clientAddress = clientSessionSocket.getInetAddress() + ":" + clientSessionSocket.getPort();
                 System.out.println("Accepted new connection from " + clientAddress);
                 try {
