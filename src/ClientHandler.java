@@ -29,7 +29,6 @@ public class ClientHandler implements Runnable {
         try {
             this.handleRequest();
         } catch (Exception e) {
-            // TODO: also printing while clients shuts down the connection...
             System.out.println("[" + this.clientAddress + "]: Failed to respond to client");
         }
     }
@@ -45,8 +44,6 @@ public class ClientHandler implements Runnable {
                 request.readFullRequest(this.clientInputStream);
                 System.out.println("[" + this.clientAddress + "]: HTTP request Headers: \n" + request.getRawHeaders());
                 request.parseRequest();
-                // TODO: decide if delete the next line
-                //System.out.println("[" + this.clientAddress + "]: HTTP request Headers: \n" + request.getHeaders());
             } catch (IOException e) {
                 // Could not read client's request
                 System.out.println("[" + this.clientAddress + "]: Server failed to read client's request");
@@ -76,7 +73,6 @@ public class ClientHandler implements Runnable {
                 return;
             }
 
-            // TODO: check if we can use System.getProperty("user.home") to replace ~
             String requestedFilePath = System.getProperty("user.home") + this.server.getRootDirectory().substring(1) + (request.getRequestedPage().equals("/") ? this.server.getDefaultPage() : request.getRequestedPage().substring(1));
             File file = new File(requestedFilePath);
 
@@ -156,7 +152,6 @@ public class ClientHandler implements Runnable {
     }
 
     private void handleTraceRequest(HTTPResponse response, HTTPRequest request) throws IOException {
-        // TODO: check response content-type for trace
         response.addHeader("Content-Type", HTTPResponse.getContentTypeByFileName("trace").getValue());
         response.setBody(request.getRawRequest().getBytes());
         sendResponseToClient(response);
@@ -185,19 +180,6 @@ public class ClientHandler implements Runnable {
     private static byte[] addParamsToFileContent (byte[] fileContent, Map<String, String> requestParams) throws IOException {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         outputStream.write(fileContent);
-
-        // TODO: handle empty values of params - ask if needed to print empty params or ignore them
-//        if (requestParams.values().stream().anyMatch(s -> !s.isEmpty())) {
-//            outputStream.write("\nThe parameters of your request: ".getBytes());
-//            // Exclude params with empty values
-//            Map<String, String> filteredParams = requestParams.entrySet().stream()
-//                    .filter(entry -> !entry.getValue().isEmpty())
-//                    .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-//            String paramsAsString = filteredParams.toString();
-//            outputStream.write(paramsAsString.getBytes());
-//        } else {
-//            outputStream.write("\nYou did not insert any params values".getBytes());
-//        }
         outputStream.write("</br>The parameters of your request: ".getBytes());
         outputStream.write(requestParams.toString().getBytes());
 

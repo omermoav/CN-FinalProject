@@ -71,7 +71,6 @@ public class HTTPRequest {
             throw new BadRequestException("Invalid request line: " + this.requestLine);
         }
 
-        // TODO: ask what is needed to validate the HTTP request
         String[] requestLineParts = this.requestLine.split("\\s+");
         this.type = requestLineParts[0];
         parseURL(requestLineParts[1]);
@@ -128,10 +127,11 @@ public class HTTPRequest {
         String[] pairs = parametersLine.split("&");
         for (String pair : pairs) {
             String[] param = pair.split("=", 2);
-            if (param.length > 1) {
+            if (param.length == 2) {
                 this.parameters.put(param[0], param[1]);
+            } else if (param.length == 1){
+                this.parameters.put(param[0],"");
             }
-            // TODO: Else -> BadRequest(?)
         }
     }
 

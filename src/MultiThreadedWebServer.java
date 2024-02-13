@@ -25,7 +25,7 @@ public class MultiThreadedWebServer {
             System.out.println("Server is listening on port " + this.portNumber);
             while (true) {
                 Socket clientSessionSocket = serverSocket.accept();
-                clientSessionSocket.setSoTimeout(10000);
+                clientSessionSocket.setSoTimeout(10000); //Avoid indefinably wait on read() when content-length > actual content
                 clientAddress = clientSessionSocket.getInetAddress() + ":" + clientSessionSocket.getPort();
                 System.out.println("Accepted new connection from " + clientAddress);
                 try {
